@@ -22,3 +22,5 @@ rm normal_diff*
 rm opla_*
 rm v_r_*
 rm v_t_*
+rm *.pdf
+

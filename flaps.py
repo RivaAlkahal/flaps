@@ -5,6 +5,8 @@
 #  FFF   L     AAAAA PPPPP SSSSS
 #  F     L     A   A P         S
 #  F     LLLLL A   A P     SSSSS
+#
+# Flexible Axisymmetric Planet solver
 #  
 ###############################################################################
 
@@ -17,6 +19,7 @@ import time as timing
 import matplotlib.pyplot as plt
 from scipy import sparse
 from numba import jit
+import tracemalloc
 
 ###############################################################################
 
@@ -31,6 +34,9 @@ from compute_gravity_at_point import *
 from compute_strain_rate1 import *
 from compute_strain_rate2 import *
 from compute_strain_rate3 import *
+from compute_strain_rate_sph_coords import *
+from compute_elemental_pressure import *
+from compute_dynamic_topography import *
 from export_to_vtu import *
 from quadrature_setup import *
 from compute_normals import *
@@ -109,8 +115,8 @@ if int(len(sys.argv) == 24):
    blob_z            = float(sys.argv[8])
    blob_R            = float(sys.argv[9])
    blob_theta        = float(sys.argv[10])
-   blob_R1           = float(sys.argv[11])
-   blob_R2           = float(sys.argv[12])
+   blob_depth        = float(sys.argv[11])
+   blob_thickness    = float(sys.argv[12])
    crust_rho         = float(sys.argv[13])
    crust_eta         = float(sys.argv[14])
    crust_depth       = float(sys.argv[15])
@@ -139,18 +145,18 @@ if int(len(sys.argv) == 24):
    print(sys.argv)
 
 else:
-   nelr              = 128 # Q1 cells!
+   nelr              = 64 # Q1 cells!
    visu              = 1
    nqperdim          = 3
    mapping           = 'Q2' 
    xi                = 6
-   blob_eta          = 1e23 
+   blob_eta          = 5e22 
    blob_rho          = 3960
    blob_z            = 4900e3
    blob_R            = 400e3
    blob_theta        = 0
-   blob_R1           = 0
-   blob_R2           = 0
+   blob_depth        = 0
+   blob_thickness    = 0
    crust_rho         = 4000 
    crust_eta         = 1e21
    crust_depth       = 50e3
@@ -178,7 +184,7 @@ if mapping=='Q6': mmapping=49
 
 #NEW
 # projection is n,e,q
-density_projection='q'
+density_projection='e'
 viscosity_projection='e'
 
 match planet:
@@ -215,6 +221,7 @@ match planet:
       nstep=1
       dt=0
       solve_stokes=True
+      compute_errors=False
       axisymmetric=False
       eta_ref=1
       vel_unit=1
@@ -230,6 +237,7 @@ match planet:
       nstep=1
       dt=50*year
       solve_stokes=True
+      compute_errors=False
       axisymmetric=True
       eta_ref=1e21
       vel_unit=0.01/year
@@ -245,6 +253,7 @@ match planet:
       nstep=1
       dt=50*year
       solve_stokes=True
+      compute_errors=False
       axisymmetric=True
       eta_ref=1e21
       vel_unit=0.01/year
@@ -261,12 +270,13 @@ match planet:
       nstep=1
       dt=50*year
       solve_stokes=True
+      compute_errors=False
       axisymmetric=True
       eta_ref=1e21
       vel_unit=0.01/year
       velunit='cm/year'
-      surface_free_slip=True
-      bottom_free_slip=False 
+      surface_free_slip=False
+      bottom_free_slip=False # NOT IMPLEMENTED 
       compute_gravity=False
       gravity_model=0
       rho_core=8050
@@ -287,20 +297,21 @@ match planet:
       lowermantle_rho   = 3550 
       lowermantle_eta   = 1e21
 
-      blob_R1           = 2296e3-100e3
-      blob_R2           = blob_R1+235e3
+      blob_depth        = 900e3
+      blob_thickness    = 200e3
       blob_theta        = 1700./(3396-1100+100) #np.pi/8
       blob_rho          = lowermantle_rho-70 
-      blob_eta          = 1e21
+      blob_eta          = 3e21
 
    case _:
       exit('pb1 in flaps setup: unknown planet')
 
+
 ###########################################################
 
 debug=False
-compute_sr1=False
-compute_sr3=False
+compute_sr1=True
+compute_sr3=True
 
 ###############################################################################
 # read data for planets
@@ -419,7 +430,7 @@ match planet:
 
          print('     -> read rho_stw105.ascii ok')
 
-      print("read EARTH data...........................(%.3fs)" % (timing.time() - start))
+      print("read EARTH data...........................(%.3fs)" % (timing.time() - start),flush=True)
 
    ############################################################################
    case 'Mars':
@@ -454,7 +465,7 @@ match planet:
          R_disc4 = 1822.5068139999998e3
          eta_max=1e25
 
-      print("read MARS data............................(%.3fs)" % (timing.time() - start))
+      print("read MARS data............................(%.3fs)" % (timing.time() - start),flush=True)
 
    ############################################################################
    case '4DEarthBenchmark':
@@ -489,6 +500,10 @@ match planet:
    case _:
       exit('unknown planet in flaps')
 
+
+blob_R1=R2-blob_depth-blob_thickness/2
+blob_R2=R2-blob_depth+blob_thickness/2
+
 ###############################################################################
 # quadrature points and associated weights
 ###############################################################################
@@ -496,7 +511,7 @@ start = timing.time()
 
 nqel,qcoords_r,qcoords_s,qweights=quadrature_setup(nqperdim)
 
-print("quadrature setup..........................(%.3fs)" % (timing.time() - start))
+print("quadrature setup..........................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # grid point setup
@@ -590,49 +605,7 @@ else:
    if debug:
       np.savetxt('grid.ascii',np.array([xV,zV,theta]).T,header='# x,y',fmt='%1.4e')
 
-print("coordinate arrays.........................(%.3fs)" % (timing.time() - start))
-
-###############################################################################
-# build iconQ1 array 
-###############################################################################
-start = timing.time()
-
-iconQ1 =np.zeros((4,nel),dtype=np.int32)
-
-if not axisymmetric:
-
-   counter = 0
-   for j in range(0, nelr):
-       for i in range(0, nelt):
-           icon1=counter
-           icon2=counter+1
-           icon3=i+(j+1)*nelt+1
-           icon4=i+(j+1)*nelt
-           if i==nelt-1:
-              icon2-=nelt
-              icon3-=nelt
-           iconQ1[0,counter] = icon2 
-           iconQ1[1,counter] = icon1
-           iconQ1[2,counter] = icon4
-           iconQ1[3,counter] = icon3
-           counter += 1
-       #end for
-   #end for
-
-else:
-
-   counter = 0
-   for j in range(0,nelr):
-       for i in range(0,nelt):
-           iconQ1[0,counter] = i + j * (nelt + 1)
-           iconQ1[1,counter] = i + 1 + j * (nelt + 1)
-           iconQ1[2,counter] = i + 1 + (j + 1) * (nelt + 1)
-           iconQ1[3,counter] = i + (j + 1) * (nelt + 1)
-           counter += 1
-
-if debug: export_Q1_mesh_to_vtu(NV,nel,xV,zV,iconQ1)
-
-print("build iconQ1..............................(%.3fs)" % (timing.time() - start))
+print("coordinate arrays.........................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # now that the grid has been built as if it was a Q1 grid, 
@@ -686,15 +659,15 @@ print('  density_projection=',density_projection)
 print('  viscosity_projection=',viscosity_projection)
 print('  -------------------')
 
-print("compute nelr,nelt,nel.....................(%.3fs)" % (timing.time() - start))
+print("compute nelr,nelt,nel.....................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # connectivity
 ###############################################################################
 start = timing.time()
 
-iconV =np.zeros((mV,nel),dtype=np.int32,order='F')
-iconP =np.zeros((mP,nel),dtype=np.int32,order='F')
+iconV=np.zeros((mV,nel),dtype=np.int32,order='F')
+iconP=np.zeros((mP,nel),dtype=np.int32,order='F')
 
 if not axisymmetric:
 
@@ -769,6 +742,151 @@ else:
 print("connectivity array........................(%.3fs)" % (timing.time() - start))
 
 ###############################################################################
+# refacture radial structure of mesh for MarsDisc
+# user decides number of elements in crust and lithosphere below.
+# the remaining number of elements is split equally between 
+# upper and lower mantle.
+###############################################################################
+start = timing.time()
+
+nodesmoho=np.zeros(NV,dtype=bool) 
+nodesLAB=np.zeros(NV,dtype=bool) 
+
+if planet=='MarsDisc':
+
+   nelr_crust=4
+   nelr_lith=2
+   nelr_upper=int((nelr-nelr_crust-nelr_lith)/2)
+   nelr_lower=nelr-nelr_crust-nelr_lith-nelr_upper
+
+   hr_crust=crust_depth/nelr_crust
+   hr_lith=(lithosphere_depth-crust_depth)/nelr_lith
+   hr_upper=(uppermantle_depth-lithosphere_depth)/nelr_upper
+   hr_lower=(R2-R1-uppermantle_depth)/nelr_lower
+
+   print(spacing+'-> hr_crust=',hr_crust)
+   print(spacing+'-> hr_lith=',hr_lith)
+   print(spacing+'-> hr_upper=',hr_upper)
+   print(spacing+'-> hr_lower=',hr_lower)
+
+   counter = 0
+   for j in range(0, nelr):
+       for i in range(0, nelt):
+           nodes=iconV[:,counter]
+           for k in range(0,nelr_crust):
+               if j==nelr-1-k:
+                  rad[nodes[3]]=R2-hr_crust*k
+                  rad[nodes[6]]=R2-hr_crust*k
+                  rad[nodes[2]]=R2-hr_crust*k
+                  rad[nodes[0]]=R2-hr_crust*(k+1)
+                  rad[nodes[4]]=R2-hr_crust*(k+1)
+                  rad[nodes[1]]=R2-hr_crust*(k+1)
+               if j==nelr-1-(nelr_crust-1):
+                  nodesmoho[nodes[0]]=True
+                  nodesmoho[nodes[1]]=True
+                  nodesmoho[nodes[4]]=True
+
+           for k in range(0,nelr_lith):
+               if j==nelr-1-nelr_crust-k:
+                  rad[nodes[3]]=R2-crust_depth-hr_lith*k
+                  rad[nodes[6]]=R2-crust_depth-hr_lith*k
+                  rad[nodes[2]]=R2-crust_depth-hr_lith*k
+                  rad[nodes[0]]=R2-crust_depth-hr_lith*(k+1)
+                  rad[nodes[4]]=R2-crust_depth-hr_lith*(k+1)
+                  rad[nodes[1]]=R2-crust_depth-hr_lith*(k+1)
+               if j==nelr-1-(nelr_crust+nelr_lith-1):
+                  nodesLAB[nodes[0]]=True
+                  nodesLAB[nodes[1]]=True
+                  nodesLAB[nodes[4]]=True
+
+           for k in range(0,nelr_upper):
+               if j==nelr-1-nelr_crust-nelr_lith-k:
+                  rad[nodes[3]]=R2-lithosphere_depth-hr_upper*k
+                  rad[nodes[6]]=R2-lithosphere_depth-hr_upper*k
+                  rad[nodes[2]]=R2-lithosphere_depth-hr_upper*k
+                  rad[nodes[0]]=R2-lithosphere_depth-hr_upper*(k+1)
+                  rad[nodes[4]]=R2-lithosphere_depth-hr_upper*(k+1)
+                  rad[nodes[1]]=R2-lithosphere_depth-hr_upper*(k+1)
+
+           for k in range(0,nelr_lower):
+               if j==nelr-1-nelr_crust-nelr_lith-nelr_upper-k:
+                  rad[nodes[3]]=R2-uppermantle_depth-hr_lower*k
+                  rad[nodes[6]]=R2-uppermantle_depth-hr_lower*k
+                  rad[nodes[2]]=R2-uppermantle_depth-hr_lower*k
+                  rad[nodes[0]]=R2-uppermantle_depth-hr_lower*(k+1)
+                  rad[nodes[4]]=R2-uppermantle_depth-hr_lower*(k+1)
+                  rad[nodes[1]]=R2-uppermantle_depth-hr_lower*(k+1)
+           counter += 1
+       #end for
+   #end for
+
+   # rebuild Cartesian coords
+   for iel in range(nel):
+       nodes=iconV[:,iel]
+       # move mid-edges nodes in the middle
+       rad[nodes[7]]=0.5*(rad[nodes[0]]+rad[nodes[3]])
+       rad[nodes[8]]=0.5*(rad[nodes[4]]+rad[nodes[6]])
+       rad[nodes[5]]=0.5*(rad[nodes[1]]+rad[nodes[2]])
+       for k in range(0,mV):
+           xV[nodes[k]]=np.sin(theta[nodes[k]])*rad[nodes[k]]
+           zV[nodes[k]]=np.cos(theta[nodes[k]])*rad[nodes[k]]
+
+   if debug: np.savetxt('grid_after.ascii',np.array([xV,zV,theta]).T,header='# x,y',fmt='%1.4e')
+
+print("tailor mesh for MarsDisc (1) .............(%.3fs)" % (timing.time() - start))
+
+###############################################################################
+# adjust mesh for MarsDisc (iconV needed)
+# 3 6 2
+# 7 8 5
+# 0 4 1
+###############################################################################
+start = timing.time()
+
+nodesR1=np.zeros(NV,dtype=bool) 
+nodesR2=np.zeros(NV,dtype=bool) 
+
+if planet=='MarsDisc':
+
+   rad_moho=R2-crust_depth
+
+   for iel in range(nel):
+       nodes=iconV[:,iel]
+
+       # move nodes for blob_R1
+       if blob_R1>rad[nodes[0]] and blob_R1<rad[nodes[7]]: rad[nodes[0]]=blob_R1 ; nodesR1[nodes[0]]=True # move node 0 up
+       if blob_R1>rad[nodes[7]] and blob_R1<rad[nodes[3]]: rad[nodes[3]]=blob_R1 ; nodesR1[nodes[3]]=True # move node 3 down
+       if blob_R1>rad[nodes[4]] and blob_R1<rad[nodes[8]]: rad[nodes[4]]=blob_R1 ; nodesR1[nodes[4]]=True # move node 4 up
+       if blob_R1>rad[nodes[8]] and blob_R1<rad[nodes[6]]: rad[nodes[6]]=blob_R1 ; nodesR1[nodes[6]]=True # move node 6 down
+       if blob_R1>rad[nodes[1]] and blob_R1<rad[nodes[5]]: rad[nodes[1]]=blob_R1 ; nodesR1[nodes[1]]=True # move node 1 up
+       if blob_R1>rad[nodes[5]] and blob_R1<rad[nodes[2]]: rad[nodes[2]]=blob_R1 ; nodesR1[nodes[2]]=True # move node 2 down
+
+       # move nodes for blob_R2
+       if blob_R2>rad[nodes[0]] and blob_R2<rad[nodes[7]]: rad[nodes[0]]=blob_R2 ; nodesR2[nodes[0]]=True # move node 0 up
+       if blob_R2>rad[nodes[7]] and blob_R2<rad[nodes[3]]: rad[nodes[3]]=blob_R2 ; nodesR2[nodes[3]]=True # move node 3 down
+       if blob_R2>rad[nodes[4]] and blob_R2<rad[nodes[8]]: rad[nodes[4]]=blob_R2 ; nodesR2[nodes[4]]=True # move node 4 up
+       if blob_R2>rad[nodes[8]] and blob_R2<rad[nodes[6]]: rad[nodes[6]]=blob_R2 ; nodesR2[nodes[6]]=True # move node 6 down
+       if blob_R2>rad[nodes[1]] and blob_R2<rad[nodes[5]]: rad[nodes[1]]=blob_R2 ; nodesR2[nodes[1]]=True # move node 1 up
+       if blob_R2>rad[nodes[5]] and blob_R2<rad[nodes[2]]: rad[nodes[2]]=blob_R2 ; nodesR2[nodes[2]]=True # move node 2 down
+
+   #end for
+
+   # rebuild Cartesian coords
+   for iel in range(nel):
+       nodes=iconV[:,iel]
+       # move mid-edges nodes in the middle
+       rad[nodes[7]]=0.5*(rad[nodes[0]]+rad[nodes[3]])
+       rad[nodes[8]]=0.5*(rad[nodes[4]]+rad[nodes[6]])
+       rad[nodes[5]]=0.5*(rad[nodes[1]]+rad[nodes[2]])
+       for k in range(0,mV):
+           xV[nodes[k]]=np.sin(theta[nodes[k]])*rad[nodes[k]]
+           zV[nodes[k]]=np.cos(theta[nodes[k]])*rad[nodes[k]]
+
+   if debug: np.savetxt('grid_after.ascii',np.array([xV,zV,theta]).T,header='# x,y',fmt='%1.4e')
+
+print("tailor mesh for MarsDisc (2) .............(%.3fs)" % (timing.time() - start))
+
+###############################################################################
 #now that I have both connectivity arrays I can easily build xP,zP (Q1 space)
 ###############################################################################
 start = timing.time()
@@ -786,7 +904,7 @@ for iel in range(0,nel):
     zP[iconP[2,iel]]=zV[iconV[2,iel]]
     zP[iconP[3,iel]]=zV[iconV[3,iel]]
 
-print("compute xP,zP.............................(%.3fs)" % (timing.time() - start))
+print("compute xP,zP.............................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # find out nodes on hull
@@ -803,7 +921,7 @@ for i in range(0,NV):
     if axisymmetric and xV[i]/R2<eps:
        hull[i]=True
 
-print("flag nodes on hull........................(%.3fs)" % (timing.time() - start))
+print("flag nodes on hull........................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # flag surface nodes and elements
@@ -840,7 +958,7 @@ for iel in range(0,nel):
        innerQ2[iconV[4,iel]]=True
 
 
-print("flag surf and cmb nodes+elts..............(%.3fs)" % (timing.time() - start))
+print("flag surf and cmb nodes+elts..............(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # compute normal vectors
@@ -857,7 +975,7 @@ if debug:
    np.savetxt('normals.ascii',np.array([xV[surfaceV],zV[surfaceV],\
                                         nx[surfaceV],nz[surfaceV],theta[surfaceV]]).T,fmt='%1.4e')
 
-print("compute surface normals...................(%.3fs)" % (timing.time() - start))
+print("compute surface normals...................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # define boundary conditions
@@ -915,6 +1033,7 @@ match planet:
           if not surface_free_slip and rad[i]/R2>(1-eps):
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
+          #cmb
           if rad[i]/R1<1+eps:
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
@@ -931,7 +1050,7 @@ match planet:
    case _:
       exit('unknown planet in flaps boundary conditions')
 
-print("defining boundary conditions..............(%.3fs)" % (timing.time() - start))
+print("defining boundary conditions..............(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # compute array for assembly
@@ -948,7 +1067,7 @@ for iel in range(0,nel):
             m1 =ndofV*iconV[k1,iel]+i1
             local_to_globalV[ikk,iel]=m1
     
-print("compute local_to_global...................(%.3fs)" % (timing.time() - start))
+print("compute local_to_global...................(%.3fs)" % (timing.time() - start),flush=True)
 
 ###############################################################################
 # fill I,J arrays
@@ -979,7 +1098,7 @@ for iel in range(0,nel):
             J[counter]=m1
             counter+=1
 
-print("fill I,J arrays...........................(%.3fs)" % (timing.time() - start))
+print("fill I,J arrays...........................(%.3fs)" % (timing.time() - start),flush=True)
 
 ##############################################################################################
 ##############################################################################################
@@ -1011,7 +1130,7 @@ for istep in range(0,nstep):
        export_elt_quadrature_points_to_vtu(nqperdim,nqel,qcoords_r,qcoords_s,mapping,\
                                        xmapping,zmapping)
 
-    print("define mapping............................(%.3fs)" % (timing.time() - start))
+    print("define mapping............................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute element center coordinates
@@ -1023,7 +1142,7 @@ for istep in range(0,nstep):
     print(spacing+" -> xc (m,M) %.2e %.2e " %(np.min(xc),np.max(xc)))
     print(spacing+" -> zc (m,M) %.2e %.2e " %(np.min(zc),np.max(zc)))
 
-    print("compute center coords.....................(%.3fs)" % (timing.time() - start))
+    print("compute center coords.....................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute elemental and nodal viscosity+density fields for 1st timestep only
@@ -1038,18 +1157,17 @@ for istep in range(0,nstep):
                               crust_rho,crust_eta,crust_depth,\
                               lithosphere_rho,lithosphere_eta,lithosphere_depth,\
                               uppermantle_rho,uppermantle_eta,uppermantle_depth,\
-                              lowermantle_rho,lowermantle_eta,\
-                              planet)
+                              lowermantle_rho,lowermantle_eta,planet)
 
        print(spacing+" -> eta_e (m,M) %.2e %.2e " %(np.min(viscosity_elemental),np.max(viscosity_elemental)))
        print(spacing+" -> rho_e (m,M) %.2e %.2e " %(np.min(density_elemental),np.max(density_elemental)))
        print(spacing+" -> eta_n (m,M) %.2e %.2e " %(np.min(viscosity_nodal),np.max(viscosity_nodal)))
        print(spacing+" -> rho_n (m,M) %.2e %.2e " %(np.min(density_nodal),np.max(density_nodal)))
 
-    if debug:
-       np.savetxt('xycenter'+mapping+'.ascii',np.array([xc,yc,density_elemental,viscosity_elemental]).T,fmt='%1.4e')
+    #if debug:
+    #   np.savetxt('xycenter'+mapping+'.ascii',np.array([xc,yc,density_elemental,viscosity_elemental]).T,fmt='%1.4e')
 
-    print("compute rho+eta fields....................(%.3fs)" % (timing.time() - start))
+    print("compute rho+eta fields....................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute area and volume of elements ('sanity check')
@@ -1194,7 +1312,7 @@ for istep in range(0,nstep):
 
     print(spacing+" -> total mass (meas) %.12e | nel= %d" %(np.sum(mass_elt),nelr))
     
-    print("sanity check.............................. %.3fs  | %d" % (timing.time()-start,Nfem))
+    print("sanity check + assign rho1,etaq .......... %.3fs  | %d" % (timing.time()-start,Nfem),flush=True)
 
     ###############################################################################
 
@@ -1403,12 +1521,14 @@ for istep in range(0,nstep):
 
     #end for iel
 
-    print("build FE system........................... %.3fs  | %d" % (timing.time()-start,Nfem))
+    print("build FE system........................... %.3fs  | %d" % (timing.time()-start,Nfem),flush=True)
 
     ###############################################################################
     # solve system
     ###############################################################################
     start = timing.time()
+
+    #tracemalloc.start()
 
     if solve_stokes:
        rhs=np.zeros(Nfem,dtype=np.float64)
@@ -1423,7 +1543,11 @@ for istep in range(0,nstep):
     else:
        sol=np.zeros(Nfem,dtype=np.float64)  
 
-    print("solving system............................ %.3fs  | %d" % (timing.time()-start,Nfem))
+    #measuring current and peak memory in bytes
+    #print(tracemalloc.get_traced_memory())
+    #tracemalloc.stop()
+
+    print("solving system............................ %.3fs  | %d" % (timing.time()-start,Nfem),flush=True)
 
     ###############################################################################
     # put solution into separate x,y velocity arrays
@@ -1443,13 +1567,16 @@ for istep in range(0,nstep):
     vel=np.zeros(NV,dtype=np.float64)  
     vel[:]=np.sqrt(u[:]**2+v[:]**2)
 
+    np.savetxt('vel_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],vel[innerQ2]/vel_unit,vr[innerQ2]/vel_unit,vt[innerQ2]/vel_unit]).T,fmt='%1.4e')
+    np.savetxt('vel_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],vel[outerQ2]/vel_unit,vr[outerQ2]/vel_unit,vt[outerQ2]/vel_unit]).T,fmt='%1.4e')
+
     print(spacing+" -> nelr= %d | u   (m,M) %.7e %.7e " %(nelr,np.min(u)/vel_unit,np.max(u)/vel_unit),velunit)
     print(spacing+" -> nelr= %d | v   (m,M) %.7e %.7e " %(nelr,np.min(v)/vel_unit,np.max(v)/vel_unit),velunit)
     print(spacing+" -> nelr= %d | v_r (m,M) %.7e %.7e " %(nelr,np.min(vr)/vel_unit,np.max(vr)/vel_unit),velunit)
     print(spacing+" -> nelr= %d | v_t (m,M) %.7e %.7e " %(nelr,np.min(vt)/vel_unit,np.max(vt)/vel_unit),velunit)
     print(spacing+" -> nelr= %d | vel (m,M) %.7e %.7e  "%(nelr,np.min(vel)/vel_unit,np.max(vel)/vel_unit),velunit)
 
-    print("reshape solution..........................(%.3fs)" % (timing.time() - start))
+    print("reshape solution..........................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute strain rate - center to nodes - method 1
@@ -1457,6 +1584,7 @@ for istep in range(0,nstep):
     start = timing.time()
 
     sr1=np.zeros(NV,dtype=np.float64)  
+    src=np.zeros(nel,dtype=np.float64)  
 
     if compute_sr1:
 
@@ -1469,12 +1597,16 @@ for istep in range(0,nstep):
        print(spacing+" -> ezz1 (m,M) %e %e " %(np.min(ezz1),np.max(ezz1)))
        print(spacing+" -> exz1 (m,M) %e %e " %(np.min(exz1),np.max(exz1)))
 
-       sr1=np.zeros(NV,dtype=np.float64)  
        sr1[:]=np.sqrt(0.5*(exx1[:]**2+ezz1[:]**2)+exz1[:]**2)
-       np.savetxt('sr1_R1.ascii',np.array([xV[innerQ2],zV[innerQ2],sr1[innerQ2],theta[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('sr1_R2.ascii',np.array([xV[outerQ2],zV[outerQ2],sr1[outerQ2],theta[outerQ2]]).T,fmt='%1.4e')
+       src[:]=np.sqrt(0.5*(exxc[:]**2+ezzc[:]**2)+exzc[:]**2)
 
-    print("compute strain rate meth-1................(%.3fs)" % (timing.time() - start))
+       np.savetxt('sr1_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr1[innerQ2]]).T,fmt='%1.4e')
+       np.savetxt('sr1_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr1[outerQ2]]).T,fmt='%1.4e')
+
+       np.savetxt('src_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],src[inner_element]]).T,fmt='%1.4e')
+       np.savetxt('src_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],src[outer_element]]).T,fmt='%1.4e')
+
+    print("compute strain rate meth-1................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute strain rate - corners to nodes - method 2
@@ -1498,7 +1630,10 @@ for istep in range(0,nstep):
     if debug:
        np.savetxt('strainrate'+str(istep)+'.ascii',np.array([xV,zV,exx2,ezz2,exz2]).T,fmt='%1.4e')
 
-    print("compute strain rate meth-2................(%.3fs)" % (timing.time() - start))
+    np.savetxt('sr2_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr2[innerQ2]]).T,fmt='%1.4e')
+    np.savetxt('sr2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr2[outerQ2]]).T,fmt='%1.4e')
+
+    print("compute strain rate meth-2................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute strain rate - via mass matrix - method 3
@@ -1517,57 +1652,34 @@ for istep in range(0,nstep):
        print(spacing+" -> exz3 (m,M) %e %e " %(np.min(exz3),np.max(exz3)))
 
        sr3[:]=np.sqrt(0.5*(exx3[:]**2+ezz3[:]**2)+exz3[:]**2)
-       np.savetxt('sr3_R1.ascii',np.array([xV[0:nnt],zV[0:nnt],sr3[0:nnt],theta[0:nnt]]).T,fmt='%1.4e')
-       np.savetxt('sr3_R2.ascii',np.array([xV[outerQ2],zV[outerQ2],sr3[outerQ2],theta[outerQ2]]).T,fmt='%1.4e')
 
-    print("compute strain rate meth-3................(%.3fs)" % (timing.time() - start))
+       np.savetxt('sr3_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr3[innerQ2]]).T,fmt='%1.4e')
+       np.savetxt('sr3_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr3[outerQ2]]).T,fmt='%1.4e')
+
+    print("compute strain rate meth-3................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # project pressure onto Q2 mesh
     ###############################################################################
     start = timing.time()
 
-    if solve_stokes:
-       q=project_pressure_on_Q2(NV,nel,mV,mP,p,iconP,iconV)
-    else:
-       q=np.zeros(NV,dtype=np.float64)  
+    q=project_pressure_on_Q2(NV,nel,mV,mP,p,iconP,iconV,debug,istep,solve_stokes)
 
-    print(spacing+" -> q (m,M) %e %e " %(np.min(q),np.max(q)))
-
-    if debug:
-       np.savetxt('pressure'+str(istep)+'.ascii',np.array([xV,zV,q]).T,fmt='%1.4e')
-
-    print("project pressure onto Q2 mesh.............(%.3fs)" % (timing.time() - start))
+    print("project pressure onto Q2 mesh.............(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # convert strain rate tensor to spherical coordinates
-    # Note that there is a pb when we run the model in plane strain. In that 
-    # case I set the err,ert,ett to zero for x<0
     ###############################################################################
     start = timing.time()
 
-    e_rr2=np.zeros(NV,dtype=np.float64)  
-    e_tt2=np.zeros(NV,dtype=np.float64)  
-    e_rt2=np.zeros(NV,dtype=np.float64)  
+    err1,err2,err3,errc,ert1,ert2,ert3,ertc,ett1,ett2,ett3,ettc=\
+    compute_strain_rate_sph_coords(solve_stokes,nel,NV,theta,thetac,istep,\
+                                   inner_element,outer_element,innerQ2,outerQ2,\
+                                    exx1,exx2,exx3,exxc,\
+                                    exz1,exz2,exz3,exzc,\
+                                    ezz1,ezz2,ezz3,ezzc)
 
-    if solve_stokes:
-       for i in range(0,NV):
-           if xV[i]>=0:
-              e_rr2[i]=exx2[i]*np.sin(theta[i])**2+\
-                      2*exz2[i]*np.sin(theta[i])*np.cos(theta[i])+\
-                      ezz2[i]*np.cos(theta[i])**2
-              e_tt2[i]=exx2[i]*np.cos(theta[i])**2-\
-                      2*exz2[i]*np.sin(theta[i])*np.cos(theta[i])+\
-                      ezz2[i]*np.sin(theta[i])**2
-              e_rt2[i]=(exx2[i]-ezz2[i])*np.sin(theta[i])*np.cos(theta[i])+\
-                      exz2[i]*(-np.sin(theta[i])**2+\
-                      np.cos(theta[i])**2)
-
-       print(spacing+" -> e_rr (m,M) %e %e | nel= %d" %(np.min(e_rr2),np.max(e_rr2),nel))
-       print(spacing+" -> e_tt (m,M) %e %e | nel= %d" %(np.min(e_tt2),np.max(e_tt2),nel))
-       print(spacing+" -> e_rt (m,M) %e %e | nel= %d" %(np.min(e_rt2),np.max(e_rt2),nel))
-
-    print("compute strain rate in sph. coords........(%.3fs)" % (timing.time() - start))
+    print("compute strain rate in sph. coords........(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # normalise pressure: zero average pressure on surface
@@ -1604,13 +1716,16 @@ for istep in range(0,nstep):
        q-=poffset
        p-=poffset
 
+    np.savetxt('qqq_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],q[innerQ2]]).T,fmt='%1.6e')
+    np.savetxt('qqq_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],q[outerQ2]]).T,fmt='%1.6e')
+
     print(spacing+" -> p (m,M) %e %e " %(np.min(p),np.max(p)))
     print(spacing+" -> q (m,M) %e %e " %(np.min(q),np.max(q)))
 
     if debug: 
        np.savetxt('pressure.ascii',np.array([xP,zP,p]).T,header='# x,z,p',fmt='%1.4e')
 
-    print("normalise pressure........................(%.3fs)" % (timing.time() - start))
+    print("normalise pressure........................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute average pressure at bottom (needed for dyn topo)
@@ -1631,9 +1746,38 @@ for istep in range(0,nstep):
                             *2*np.pi*R1**2*pmean
        bottom_p_avrg/=4*np.pi*R1**2
 
-    print(spacing+" -> bottom <p> (m,M) %e " %(bottom_p_avrg))
+    print(spacing+" -> bottom <p> (m,M) %e " %(bottom_p_avrg),flush=True)
 
     ###############################################################################
+    # compute elemental pressure
+    ###############################################################################
+    start = timing.time()
+
+    pc=compute_elemental_pressure(nel,p,iconP,solve_stokes)
+
+    print("compute elemental pressure................(%.3fs)" % (timing.time() - start),flush=True)
+
+    ###############################################################################
+    # normalise elemental pressure at the surface 
+    ###############################################################################
+
+    if solve_stokes:
+
+       poffset=0
+       for iel in range(0,nel):
+           if outer_element[iel]:
+              dtheta=theta[iconV[2,iel]]-theta[iconV[3,iel]]
+              poffset+=np.sin((theta[iconV[2,iel]]+theta[iconV[3,iel]])/2)*dtheta *2*np.pi*R2**2 * pc[iel]
+       poffset/=4*np.pi*R2**2
+       pc-=poffset
+
+       np.savetxt('pc_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],pc[inner_element]]).T,fmt='%1.6e')
+       np.savetxt('pc_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],pc[outer_element]]).T,fmt='%1.6e')
+
+    ###############################################################################
+    # compute analytical pressure solution 
+    ###############################################################################
+    start = timing.time()
 
     p_th=np.zeros(NP,dtype=np.float64)
     q_th=np.zeros(NV,dtype=np.float64)
@@ -1647,48 +1791,27 @@ for istep in range(0,nstep):
        np.savetxt('q_th.ascii',np.array([xV,zV,q_th]).T,header='# x,z,p',fmt='%1.4e')
        np.savetxt('q_th_R2.ascii',np.array([theta[outerQ2],q_th[outerQ2]]).T,fmt='%1.4e')
 
+    print("compute analytical pressure...............(%.3fs)" % (timing.time()-start),flush=True)
+
     ###############################################################################
     # since I have zeroed the the spherical components of the strain rate for x<0
     # then I also zero the dynamic topography
     ###############################################################################
     start = timing.time()
 
-    dyn_topo_nodal=np.zeros(NV,dtype=np.float64)
-    for i in range(0,NV):
-        if surfaceV[i] and xV[i]>=0:
-           dyn_topo_nodal[i]= -(2*viscosity_nodal[i]*e_rr2[i]-q[i])/(crust_rho*g0) 
-        if cmbV[i] and xV[i]>=0:
-           dyn_topo_nodal[i]= -(2*viscosity_nodal[i]*e_rr2[i]-(q[i]-bottom_p_avrg))/((lowermantle_rho-rho_core)*g0) 
+    dyn_topo_elemental,dyn_topo_nodal1,dyn_topo_nodal2,dyn_topo_nodal3=\
+    compute_dynamic_topography(nel,NV,viscosity_nodal,viscosity_elemental,errc,err1,err2,err3,q,pc,solve_stokes,\
+                               surfaceV,cmbV,inner_element,outer_element,innerQ2,outerQ2,istep,theta,thetac,\
+                               uppermantle_rho,lowermantle_rho,rho_core,g0,bottom_p_avrg)
 
-    print("compute dynamic topography................(%.3fs)" % (timing.time() - start))
-
-    ###############################################################################
-    # export fields at both surfaces
-    ###############################################################################
-    start = timing.time()
-
-    np.savetxt('qqq_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],q[innerQ2]]).T,fmt='%1.6e')
-    np.savetxt('qqq_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],q[outerQ2]]).T,fmt='%1.6e')
-    np.savetxt('sr2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr2[outerQ2]]).T,fmt='%1.4e')
-    np.savetxt('vel_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],vel[outerQ2]/vel_unit,vr[outerQ2]/vel_unit,vt[outerQ2]/vel_unit]).T,fmt='%1.4e')
-    np.savetxt('err_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],e_rr2[outerQ2]]).T,fmt='%1.4e')
-    np.savetxt('d_t_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],dyn_topo_nodal[innerQ2]]).T,fmt='%1.4e')
-    np.savetxt('d_t_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],dyn_topo_nodal[outerQ2]]).T,fmt='%1.4e')
-    #if axisymmetric:
-    #   leftV=np.zeros(NV,dtype=bool) 
-    #   for i in range(0,NV):
-    #       if xV[i]<eps and zV[i]>0: leftV[i]=True
-    #   np.savetxt('sr2_left_'+str(istep)+'.ascii',np.array([xV[leftV],zV[leftV],sr2[leftV],rad[leftV]]).T,fmt='%1.4e')
-    #   np.savetxt('vel_left_'+str(istep)+'.ascii',np.array([xV[leftV],zV[leftV],vel[leftV],rad[leftV]]).T,fmt='%1.4e')
-
-    print("export p&q on R1,R2.......................(%.3fs)" % (timing.time() - start))
+    print("compute dynamic topography................(%.3fs)" % (timing.time()-start),flush=True)
 
     ###############################################################################
     # compute errors and vrms
     ###############################################################################
     start = timing.time()
 
-    if solve_stokes:
+    if solve_stokes and compute_errors :
        errv,errp,vrms=compute_errors(nel,nqel,mapping,xmapping,zmapping,qcoords_r,\
                                      qcoords_s,qweights,R1,R2,lowermantle_rho,g0,u,v,p,\
                                      axisymmetric,iconV,iconP,total_volume,planet)
@@ -1699,37 +1822,7 @@ for istep in range(0,nstep):
     else:
        errv=errp=vrms=0
 
-    print("compute errors............................(%.3fs)" % (timing.time() - start))
-
-    ###############################################################################
-    # compute gravity acceleration on pressure nodes
-    ###############################################################################
-    start = timing.time()
-
-    self_gravitation=False
-
-    if self_gravitation:
-
-       g_x=np.zeros(NP,dtype=np.float64)   
-       g_y=np.zeros(NP,dtype=np.float64)   
-       g_z=np.zeros(NP,dtype=np.float64)   
-       gnorm=np.zeros(NP,dtype=np.float64)   
-
-       for i in range(0,NP):
-           if i%100==0: print('i=',i,'/',NP)
-           g_x[i],g_y[i],g_z[i]=\
-           compute_gravity_at_point(xP[i],zP[i],nel,nqel,zq,radq,thetaq,massq,nel_phi)
-           #print(xV[i],zV[i],g_x[i],g_y[i],g_z[i])
-
-       gnorm[:]=np.sqrt(g_x[:]**2+g_y[:]**2+g_z[:]**2)
-
-       np.savetxt('gravity_self.ascii',np.array([xP,zP,g_x,g_y,g_z,gnorm]).T,fmt='%1.4e')
-
-       print(spacing+"     -> g_x (m,M) %.4e %.4e " %(np.min(g_x),np.max(g_x)))
-       print(spacing+"     -> g_y (m,M) %.4e %.4e " %(np.min(g_y),np.max(g_y)))
-       print(spacing+"     -> g_z (m,M) %.4e %.4e " %(np.min(g_z),np.max(g_z)))
-
-       print("self gravity (%.3fs)" % (timing.time() - start))
+    print("compute errors............................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # plot of solution
@@ -1741,10 +1834,10 @@ for istep in range(0,nstep):
                               theta,nx,nz,sr1,sr2,sr3,density_nodal,density_elemental,\
                               viscosity_nodal,viscosity_elemental,R1,R2,lowermantle_rho,\
                               gravity_model,g0,rho_core,blob_rho,blob_R,blob_z,hull,\
-                              inner_element,outer_element,innerQ2,outerQ2,bc_fix,\
-                              e_rr2,e_tt2,e_rt2,vol_elt,mass_elt,planet)
+                              inner_element,outer_element,innerQ2,outerQ2,nodesR1,nodesR2,nodesmoho,nodesLAB,bc_fix,\
+                              err2,ett2,ert2,vol_elt,mass_elt,planet)
 
-    print("export to vtu file........................(%.3fs)" % (timing.time() - start))
+    print("export to vtu file........................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
 
@@ -1755,7 +1848,8 @@ for istep in range(0,nstep):
        (nelr,np.min(vt)/vel_unit,np.max(vt)/vel_unit))
 
        if density_projection=='e':
-          print(spacing+" -> DTGbenchmark | mass_blob",nelr,np.sum(density_elemental[np.where(density_elemental<4000)]*vol_elt[np.where(density_elemental<4000)]))
+          print(spacing+" -> DTGbenchmark | mass_blob",nelr,np.sum(density_elemental[np.where(density_elemental<4000)]\
+                                                            *vol_elt[np.where(density_elemental<4000)]))
 
     ###############################################################################
     # M is in (x,z) y=0 plane, so yM=0
@@ -1797,7 +1891,7 @@ for istep in range(0,nstep):
            tend2=timing.time()
            print("point ",i,"/",np_grav,\
                  "-> time: %.3fs, time per elt per slice: %.9fs" %\
-                   (tend2-start2,(tend2-start2)/nel/nel_phi))
+                   (tend2-start2,(tend2-start2)/nel/nel_phi),flush=True)
        #end for i
 
        gnorm[:]=np.sqrt(gvect_x[:]**2+gvect_y[:]**2+gvect_z[:]**2)
@@ -1871,12 +1965,13 @@ for istep in range(0,nstep):
           np.savetxt('grid_after_advection_{:04d}.ascii'.format(istep),np.array([xV,zV]).T,header='# x,y',fmt='%1.4e')
           np.savetxt('grid_distortion_{:04d}.ascii'.format(istep),np.array([xV,zV,u*dt,v*dt]).T,header='# x,y',fmt='%1.4e')
 
-    print("advection step............................(%.3fs)" % (timing.time() - start))
+    print("advection step............................(%.3fs)" % (timing.time() - start),flush=True)
 
 #end for istep
 
 print("+=================================================")
 print("----------------the end--------------------------")
 print("+=================================================")
+
 
 ###############################################################################

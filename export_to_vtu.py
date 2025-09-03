@@ -12,7 +12,8 @@ def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
                            theta,nx,nz,sr1,sr2,sr3,density_nodal,density_elemental,\
                            viscosity_nodal,viscosity_elemental,R1,R2,rho_m,gravity_model,\
                            g0,rhoc,rhoblob,Rblob,zblob,hull,inner_element,outer_element,\
-                           innerQ2,outerQ2,bc_fix,e_rr2,e_tt2,e_rt2,vol_elt,mass_elt,planet):
+                           innerQ2,outerQ2,nodesR1,nodesR2,nodesmoho,nodesLAB,\
+                           bc_fix,e_rr2,e_tt2,e_rt2,vol_elt,mass_elt,planet):
 
    vtufile=open("solution_"+str(istep)+".vtu","w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
@@ -108,6 +109,38 @@ def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
    vtufile.write("<DataArray type='Float32' Name='innerQ2' Format='ascii'> \n")
    for i in range(0,NV):
        if innerQ2[i]:
+          vtufile.write("%e \n" % 1)
+       else:
+          vtufile.write("%e \n" % 0)
+   vtufile.write("</DataArray>\n")
+   #--
+   vtufile.write("<DataArray type='Float32' Name='nodes at blob_R1' Format='ascii'> \n")
+   for i in range(0,NV):
+       if nodesR1[i]:
+          vtufile.write("%e \n" % 1)
+       else:
+          vtufile.write("%e \n" % 0)
+   vtufile.write("</DataArray>\n")
+   #--
+   vtufile.write("<DataArray type='Float32' Name='nodes at blob_R2' Format='ascii'> \n")
+   for i in range(0,NV):
+       if nodesR2[i]:
+          vtufile.write("%e \n" % 1)
+       else:
+          vtufile.write("%e \n" % 0)
+   vtufile.write("</DataArray>\n")
+   #--
+   vtufile.write("<DataArray type='Float32' Name='nodes at moho' Format='ascii'> \n")
+   for i in range(0,NV):
+       if nodesmoho[i]:
+          vtufile.write("%e \n" % 1)
+       else:
+          vtufile.write("%e \n" % 0)
+   vtufile.write("</DataArray>\n")
+   #--
+   vtufile.write("<DataArray type='Float32' Name='nodes at LAB' Format='ascii'> \n")
+   for i in range(0,NV):
+       if nodesLAB[i]:
           vtufile.write("%e \n" % 1)
        else:
           vtufile.write("%e \n" % 0)
