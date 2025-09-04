@@ -15,7 +15,7 @@ import numpy as np
 
 #@jit(nopython=True)
 def viscosity_MarsDisc(x,z,R1,R2,\
-                       blob_eta,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                       blob_eta,blob_z,blob_R1,blob_R2,blob_theta,\
                        crust_eta,crust_depth,\
                        lithosphere_eta,lithosphere_depth,\
                        uppermantle_eta,uppermantle_depth,\

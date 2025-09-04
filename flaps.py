@@ -145,7 +145,7 @@ if int(len(sys.argv) == 24):
    print(sys.argv)
 
 else:
-   nelr              = 64 # Q1 cells!
+   nelr              = 150 # Q1 cells!
    visu              = 1
    nqperdim          = 3
    mapping           = 'Q2' 
@@ -275,7 +275,7 @@ match planet:
       eta_ref=1e21
       vel_unit=0.01/year
       velunit='cm/year'
-      surface_free_slip=False
+      surface_free_slip=True
       bottom_free_slip=False # NOT IMPLEMENTED 
       compute_gravity=False
       gravity_model=0
@@ -309,7 +309,7 @@ match planet:
 
 ###########################################################
 
-debug=False
+debug=True
 compute_sr1=True
 compute_sr3=True
 
@@ -893,6 +893,7 @@ start = timing.time()
 
 xP=np.empty(NP,dtype=np.float64)  # x coordinates
 zP=np.empty(NP,dtype=np.float64)  # y coordinates
+thetaQ1=np.empty(NP,dtype=np.float64)  # theta sph. coordinate
 
 for iel in range(0,nel):
     xP[iconP[0,iel]]=xV[iconV[0,iel]]
@@ -903,6 +904,9 @@ for iel in range(0,nel):
     zP[iconP[1,iel]]=zV[iconV[1,iel]]
     zP[iconP[2,iel]]=zV[iconV[2,iel]]
     zP[iconP[3,iel]]=zV[iconV[3,iel]]
+
+for i in range(0,NP):           
+    thetaQ1[i]=np.pi/2-np.arctan2(zP[i],xP[i])
 
 print("compute xP,zP.............................(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -945,6 +949,8 @@ for iel in range(0,nel):
     if cmbV[iconV[0,iel]]:
        inner_element[iel]=True 
 
+outerQ1=np.zeros(NP,dtype=bool) 
+innerQ1=np.zeros(NP,dtype=bool) 
 outerQ2=np.zeros(NV,dtype=bool) 
 innerQ2=np.zeros(NV,dtype=bool) 
 for iel in range(0,nel):
@@ -952,11 +958,14 @@ for iel in range(0,nel):
        outerQ2[iconV[2,iel]]=True
        outerQ2[iconV[3,iel]]=True
        outerQ2[iconV[6,iel]]=True
+       outerQ1[iconP[2,iel]]=True
+       outerQ1[iconP[3,iel]]=True
     if inner_element[iel]:
        innerQ2[iconV[0,iel]]=True
        innerQ2[iconV[1,iel]]=True
        innerQ2[iconV[4,iel]]=True
-
+       innerQ1[iconP[0,iel]]=True
+       innerQ1[iconP[1,iel]]=True
 
 print("flag surf and cmb nodes+elts..............(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -965,11 +974,18 @@ print("flag surf and cmb nodes+elts..............(%.3fs)" % (timing.time() - sta
 ###############################################################################
 start = timing.time()
 
-normal_type=1
 
-nx,nz=compute_normals(normal_type,NV,xV,zV,mV,nqel,surfaceV,hull,\
+xmapping,zmapping=define_mapping(mapping,mmapping,xV,zV,iconV,nel,axisymmetric,rad,theta,nelt)
+
+print(spacing+" -> xmapping (m,M) %.2e %.2e " %(np.min(xmapping),np.max(xmapping)))
+print(spacing+" -> zmapping (m,M) %.2e %.2e " %(np.min(zmapping),np.max(zmapping)))
+
+
+normal_type=2
+
+nx,nz=compute_normals(normal_type,nel,NV,xV,zV,mV,nqel,surfaceV,hull,\
                       R1,R2,eps,iconV,axisymmetric,rad,theta,\
-                      qcoords_r,qcoords_s,qweights,)
+                      qcoords_r,qcoords_s,qweights,mapping,xmapping,zmapping)
 
 if debug:
    np.savetxt('normals.ascii',np.array([xV[surfaceV],zV[surfaceV],\
@@ -1001,6 +1017,7 @@ match planet:
           if not surface_free_slip and rad[i]/R2>(1-eps):
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
+          #cmb is no slip
           if rad[i]/R1<1+eps:
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
@@ -1012,11 +1029,12 @@ match planet:
           if axisymmetric and xV[i]/R1<eps:
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 #u=0
              if rad[i]/R2>1-eps:
-                bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0 #also v=0 for 2 pts
+                bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0 #v=0 
           #surface
           if not surface_free_slip and rad[i]/R2>(1-eps):
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
+          #cmb is no slip
           if rad[i]/R1<1+eps:
              bc_fix[i*ndofV]   = True ; bc_val[i*ndofV]   = 0 
              bc_fix[i*ndofV+1] = True ; bc_val[i*ndofV+1] = 0
@@ -1245,7 +1263,7 @@ for istep in range(0,nstep):
 
                      case "MarsDisc":
                         rhoq[counterq]=density_MarsDisc(xq,zq,R1,R2,\
-                                                        blob_rho,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                                                        blob_rho,blob_z,blob_R1,blob_R2,blob_theta,\
                                                         crust_rho,crust_depth,\
                                                         lithosphere_rho,lithosphere_depth,\
                                                         uppermantle_rho,uppermantle_depth,\
@@ -1312,12 +1330,12 @@ for istep in range(0,nstep):
 
     print(spacing+" -> total mass (meas) %.12e | nel= %d" %(np.sum(mass_elt),nelr))
     
-    print("sanity check + assign rho1,etaq .......... %.3fs  | %d" % (timing.time()-start,Nfem),flush=True)
+    print("sanity check + assign rhoq,etaq .......... %.3fs  | %d" % (timing.time()-start,Nfem),flush=True)
 
     ###############################################################################
 
     if debug:
-       np.savetxt('qpoints.ascii',np.array([coords_xq,coords_zq,rhoq,etaq]).T,header='# x,y,rho,eta',fmt='%1.4e')
+       np.savetxt('qpoints.ascii',np.array([coords_xq,coords_zq,rhoq,etaq]).T,header='# x,y,rho,eta',fmt='%1.6e')
 
     export_quadrature_points_to_vtu(nel*nqel,coords_xq,coords_zq,rhoq,etaq)
 
@@ -1326,15 +1344,15 @@ for istep in range(0,nstep):
     ###############################################################################
     start = timing.time()
 
-    f_rhs = np.zeros(NfemV,dtype=np.float64) 
-    h_rhs = np.zeros(NfemP,dtype=np.float64) 
-    dNNNVdx  = np.zeros(mV,dtype=np.float64) 
-    dNNNVdy  = np.zeros(mV,dtype=np.float64) 
+    f_rhs=np.zeros(NfemV,dtype=np.float64) 
+    h_rhs=np.zeros(NfemP,dtype=np.float64) 
+    dNNNVdx=np.zeros(mV,dtype=np.float64) 
+    dNNNVdy=np.zeros(mV,dtype=np.float64) 
     jcb=np.zeros((2,2),dtype=np.float64)
 
     if axisymmetric:
-       #c_mat=np.array([[2,0,0,0],[0,2,0,0],[0,0,2,0],[0,0,0,1]],dtype=np.float64) 
-       c_mat=np.array([[4/3,-2/3,-2/3,0],[-2/3,4/3,-2/3,0],[-2/3,-2/3,4/3,0],[0,0,0,1]],dtype=np.float64) 
+       c_mat=np.array([[2,0,0,0],[0,2,0,0],[0,0,2,0],[0,0,0,1]],dtype=np.float64) #better 
+       #c_mat=np.array([[4/3,-2/3,-2/3,0],[-2/3,4/3,-2/3,0],[-2/3,-2/3,4/3,0],[0,0,0,1]],dtype=np.float64) 
        b_mat= np.zeros((4,ndofV*mV),dtype=np.float64) # gradient matrix B 
        N_mat= np.zeros((4,ndofP*mP),dtype=np.float64) # matrix  
     else:
@@ -1348,9 +1366,9 @@ for istep in range(0,nstep):
 
         if not solve_stokes: break 
 
-        f_el =np.zeros((mV*ndofV),dtype=np.float64)
         K_el =np.zeros((mV*ndofV,mV*ndofV),dtype=np.float64)
         G_el=np.zeros((mV*ndofV,mP*ndofP),dtype=np.float64)
+        f_el =np.zeros((mV*ndofV),dtype=np.float64)
         h_el=np.zeros((mP*ndofP),dtype=np.float64)
 
         for kq in range(0,nqel):
@@ -1380,10 +1398,8 @@ for istep in range(0,nstep):
             NNNP=NNN(rq,sq,'Q1')
 
             # compute dNdx & dNdy
-            for k in range(0,mV):
-                dNNNVdx[k]=jcbi[0,0]*dNNNVdr[k]+jcbi[0,1]*dNNNVds[k]
-                dNNNVdy[k]=jcbi[1,0]*dNNNVdr[k]+jcbi[1,1]*dNNNVds[k]
-            #end for 
+            dNNNVdx[:]=jcbi[0,0]*dNNNVdr[:]+jcbi[0,1]*dNNNVds[:]
+            dNNNVdy[:]=jcbi[1,0]*dNNNVdr[:]+jcbi[1,1]*dNNNVds[:]
 
             if axisymmetric:
 
@@ -1427,20 +1443,9 @@ for istep in range(0,nstep):
 
         G_el*=eta_ref/h_r
 
-        #Kmax=np.max(abs(K_el))
-        #Gmax=np.max(abs(G_el))
-        #fmax=np.max(abs(f_el))
-        #K_el/=Kmax
-        #G_el/=Gmax
-        #f_el/=fmax
-        #for i in range(0,mV): #counter rotation by angle alpha
-        #    RotMat[2*i  ,2*i]= np.cos(alpha) ; RotMat[2*i  ,2*i+1]=np.sin(alpha)
-        #    RotMat[2*i+1,2*i]=-np.sin(alpha) ; RotMat[2*i+1,2*i+1]=np.cos(alpha)
-
-        if surface_free_slip and outer_element[iel]==1:
+        if surface_free_slip and outer_element[iel]:
            for k in range(0,mV):
                inode=iconV[k,iel]
-               #if surfaceV[inode] and xV[inode]>0 and (not bc_fix[inode*ndofV]):
                if surfaceV[inode] and (not bc_fix[inode*ndofV]):
 
                   #print(xV[inode],zV[inode],np.arctan2(nx[inode],nz[inode]),theta[inode])
@@ -1558,8 +1563,8 @@ for istep in range(0,nstep):
     p=sol[NfemV:NfemV+NfemP]*eta_ref/h_r
 
     if debug:
-       np.savetxt('velocity.ascii',np.array([xV,zV,u/vel_unit,v/vel_unit]).T,header='# x,y,u,v',fmt='%1.4e')
-       np.savetxt('pressure.ascii',np.array([xP,zP,p]).T,header='# x,y,p',fmt='%1.4e')
+       np.savetxt('velocity.ascii',np.array([xV,zV,u/vel_unit,v/vel_unit]).T,header='# x,y,u,v',fmt='%1.8e')
+       np.savetxt('p_'+str(istep)+'.ascii',np.array([xP,zP,p]).T,header='# x,y,p',fmt='%1.8e')
  
     vr= np.sin(theta)*u+np.cos(theta)*v
     vt= np.cos(theta)*u-np.sin(theta)*v
@@ -1567,8 +1572,8 @@ for istep in range(0,nstep):
     vel=np.zeros(NV,dtype=np.float64)  
     vel[:]=np.sqrt(u[:]**2+v[:]**2)
 
-    np.savetxt('vel_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],vel[innerQ2]/vel_unit,vr[innerQ2]/vel_unit,vt[innerQ2]/vel_unit]).T,fmt='%1.4e')
-    np.savetxt('vel_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],vel[outerQ2]/vel_unit,vr[outerQ2]/vel_unit,vt[outerQ2]/vel_unit]).T,fmt='%1.4e')
+    np.savetxt('vel_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],vel[innerQ2]/vel_unit,vr[innerQ2]/vel_unit,vt[innerQ2]/vel_unit]).T,fmt='%1.8e')
+    np.savetxt('vel_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],vel[outerQ2]/vel_unit,vr[outerQ2]/vel_unit,vt[outerQ2]/vel_unit]).T,fmt='%1.8e')
 
     print(spacing+" -> nelr= %d | u   (m,M) %.7e %.7e " %(nelr,np.min(u)/vel_unit,np.max(u)/vel_unit),velunit)
     print(spacing+" -> nelr= %d | v   (m,M) %.7e %.7e " %(nelr,np.min(v)/vel_unit,np.max(v)/vel_unit),velunit)
@@ -1600,11 +1605,11 @@ for istep in range(0,nstep):
        sr1[:]=np.sqrt(0.5*(exx1[:]**2+ezz1[:]**2)+exz1[:]**2)
        src[:]=np.sqrt(0.5*(exxc[:]**2+ezzc[:]**2)+exzc[:]**2)
 
-       np.savetxt('sr1_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr1[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('sr1_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr1[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt('sr1_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr1[innerQ2]]).T,fmt='%1.8e')
+       np.savetxt('sr1_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr1[outerQ2]]).T,fmt='%1.8e')
 
-       np.savetxt('src_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],src[inner_element]]).T,fmt='%1.4e')
-       np.savetxt('src_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],src[outer_element]]).T,fmt='%1.4e')
+       np.savetxt('src_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],src[inner_element]]).T,fmt='%1.8e')
+       np.savetxt('src_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],src[outer_element]]).T,fmt='%1.8e')
 
     print("compute strain rate meth-1................(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -1628,10 +1633,10 @@ for istep in range(0,nstep):
     sr2[:]=np.sqrt(0.5*(exx2[:]**2+ezz2[:]**2)+exz2[:]**2)
 
     if debug:
-       np.savetxt('strainrate'+str(istep)+'.ascii',np.array([xV,zV,exx2,ezz2,exz2]).T,fmt='%1.4e')
+       np.savetxt('strainrate'+str(istep)+'.ascii',np.array([xV,zV,exx2,ezz2,exz2]).T,fmt='%1.8e')
 
-    np.savetxt('sr2_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr2[innerQ2]]).T,fmt='%1.4e')
-    np.savetxt('sr2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr2[outerQ2]]).T,fmt='%1.4e')
+    np.savetxt('sr2_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr2[innerQ2]]).T,fmt='%1.8e')
+    np.savetxt('sr2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr2[outerQ2]]).T,fmt='%1.8e')
 
     print("compute strain rate meth-2................(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -1653,8 +1658,8 @@ for istep in range(0,nstep):
 
        sr3[:]=np.sqrt(0.5*(exx3[:]**2+ezz3[:]**2)+exz3[:]**2)
 
-       np.savetxt('sr3_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr3[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('sr3_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr3[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt('sr3_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],sr3[innerQ2]]).T,fmt='%1.9e')
+       np.savetxt('sr3_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],sr3[outerQ2]]).T,fmt='%1.9e')
 
     print("compute strain rate meth-3................(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -1663,7 +1668,7 @@ for istep in range(0,nstep):
     ###############################################################################
     start = timing.time()
 
-    q=project_pressure_on_Q2(NV,nel,mV,mP,p,iconP,iconV,debug,istep,solve_stokes)
+    q=project_pressure_on_Q2(NV,nel,mV,mP,xV,zV,p,iconP,iconV,debug,istep,solve_stokes)
 
     print("project pressure onto Q2 mesh.............(%.3fs)" % (timing.time() - start),flush=True)
 
@@ -1682,16 +1687,13 @@ for istep in range(0,nstep):
     print("compute strain rate in sph. coords........(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
-    # normalise pressure: zero average pressure on surface
+    # normalise p,q pressure fields: zero average pressure on surface
     # note that the integration could be improved (I currently only sample the 
     # pressure in 1 point in the middle of the edge)
     ###############################################################################
     start = timing.time()
 
     if not axisymmetric:
-       #if planet=='AnnulusBenchmark':
-       #   poffset=np.sum(q[0:2*nelt])/(2*nelt)
-       #else:
        poffset=0
        for iel in range(0,nel):
            if outer_element[iel]:
@@ -1699,12 +1701,10 @@ for istep in range(0,nstep):
               pmean=0.5*(p[iconP[2,iel]]+p[iconP[3,iel]])
               poffset+=dtheta*pmean
        poffset/=2*np.pi
-
        q-=poffset
        p-=poffset
 
     else: 
-
        poffset=0
        for iel in range(0,nel):
            if outer_element[iel]:
@@ -1716,16 +1716,20 @@ for istep in range(0,nstep):
        q-=poffset
        p-=poffset
 
-    np.savetxt('qqq_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],q[innerQ2]]).T,fmt='%1.6e')
-    np.savetxt('qqq_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],q[outerQ2]]).T,fmt='%1.6e')
+    print(spacing+" -> p offset %e " %(poffset))
+
+    np.savetxt('p_R1_'+str(istep)+'.ascii',np.array([thetaQ1[innerQ1],p[innerQ1]]).T,fmt='%1.9e')
+    np.savetxt('p_R2_'+str(istep)+'.ascii',np.array([thetaQ1[outerQ1],p[outerQ1]]).T,fmt='%1.9e')
+    np.savetxt('q_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],q[innerQ2]]).T,fmt='%1.9e')
+    np.savetxt('q_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],q[outerQ2]]).T,fmt='%1.9e')
 
     print(spacing+" -> p (m,M) %e %e " %(np.min(p),np.max(p)))
     print(spacing+" -> q (m,M) %e %e " %(np.min(q),np.max(q)))
 
     if debug: 
-       np.savetxt('pressure.ascii',np.array([xP,zP,p]).T,header='# x,z,p',fmt='%1.4e')
+       np.savetxt('pressure.ascii',np.array([xP,zP,p]).T,header='# x,z,p',fmt='%1.9e')
 
-    print("normalise pressure........................(%.3fs)" % (timing.time() - start),flush=True)
+    print("normalise p,q pressure...................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute average pressure at bottom (needed for dyn topo)
@@ -1760,6 +1764,7 @@ for istep in range(0,nstep):
     ###############################################################################
     # normalise elemental pressure at the surface 
     ###############################################################################
+    start = timing.time()
 
     if solve_stokes:
 
@@ -1767,12 +1772,16 @@ for istep in range(0,nstep):
        for iel in range(0,nel):
            if outer_element[iel]:
               dtheta=theta[iconV[2,iel]]-theta[iconV[3,iel]]
-              poffset+=np.sin((theta[iconV[2,iel]]+theta[iconV[3,iel]])/2)*dtheta *2*np.pi*R2**2 * pc[iel]
+              poffset+=np.sin(thetac[iel])*dtheta *2*np.pi*R2**2 * pc[iel]
        poffset/=4*np.pi*R2**2
        pc-=poffset
 
-       np.savetxt('pc_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],pc[inner_element]]).T,fmt='%1.6e')
-       np.savetxt('pc_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],pc[outer_element]]).T,fmt='%1.6e')
+       print(spacing+" -> pc offset %e " %(poffset))
+
+       np.savetxt('pc_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],pc[inner_element]]).T,fmt='%1.9e')
+       np.savetxt('pc_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],pc[outer_element]]).T,fmt='%1.9e')
+
+    print("normalise pc pressure.....................(%.3fs)" % (timing.time() - start),flush=True)
 
     ###############################################################################
     # compute analytical pressure solution 
@@ -1787,9 +1796,9 @@ for istep in range(0,nstep):
         q_th[i]=pressure(xV[i],zV[i],R1,R2,lowermantle_rho,g0,planet)
     
     if debug:    
-       np.savetxt('p_th.ascii',np.array([xP,zP,p_th]).T,header='# x,z,p',fmt='%1.4e')
-       np.savetxt('q_th.ascii',np.array([xV,zV,q_th]).T,header='# x,z,p',fmt='%1.4e')
-       np.savetxt('q_th_R2.ascii',np.array([theta[outerQ2],q_th[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt('p_th.ascii',np.array([xP,zP,p_th]).T,header='# x,z,p',fmt='%1.6e')
+       np.savetxt('q_th.ascii',np.array([xV,zV,q_th]).T,header='# x,z,p',fmt='%1.6e')
+       np.savetxt('q_th_R2.ascii',np.array([theta[outerQ2],q_th[outerQ2]]).T,fmt='%1.6e')
 
     print("compute analytical pressure...............(%.3fs)" % (timing.time()-start),flush=True)
 
@@ -1831,7 +1840,7 @@ for istep in range(0,nstep):
 
     if visu==1:
        export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
-                              theta,nx,nz,sr1,sr2,sr3,density_nodal,density_elemental,\
+                              theta,nx,nz,sr1,sr2,sr3,src,density_nodal,density_elemental,\
                               viscosity_nodal,viscosity_elemental,R1,R2,lowermantle_rho,\
                               gravity_model,g0,rho_core,blob_rho,blob_R,blob_z,hull,\
                               inner_element,outer_element,innerQ2,outerQ2,nodesR1,nodesR2,nodesmoho,nodesLAB,bc_fix,\

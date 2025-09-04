@@ -16,7 +16,7 @@ import numpy as np
 
 #@jit(nopython=True)
 def density_MarsDisc(x,z,R1,R2,\
-                     blob_rho,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                     blob_rho,blob_z,blob_R1,blob_R2,blob_theta,\
                      crust_rho,crust_depth,\
                      lithosphere_rho,lithosphere_depth,\
                      uppermantle_rho,uppermantle_depth,\

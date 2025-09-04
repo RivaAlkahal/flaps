@@ -20,6 +20,8 @@ def density_4DEarthBenchmark(x,z,R1,R2,crust_rho,lithosphere_rho,\
     if np.sqrt(x**2+(z-blob_z)**2)<blob_R:
        val=blob_rho
 
+    #val-=lowermantle_rho
+
     return val
 
 ###############################################################################

@@ -1,0 +1,222 @@
+#
+set term pdf enhanced font 'times,7pt' 
+set grid
+#set key outside
+
+set xlabel 'co-latitude theta'
+
+##################################################
+
+set output 'err_R1.pdf'
+
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'err1_R1_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R1_0.ascii' u 1:2 w l t 'e_{rr,c}'
+plot[0:pi/10][]\
+'err1_R1_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R1_0.ascii' u 1:2 w l t 'e_{rr,c}'
+plot[9*pi/10:3.15][]\
+'err1_R1_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R1_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R1_0.ascii' u 1:2 w l t 'e_{rr,c}'
+unset multiplot
+
+
+set output 'err_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'err1_R2_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R2_0.ascii' u 1:2 w l t 'e_{rr,c}'
+plot[0:pi/10][]\
+'err1_R2_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R2_0.ascii' u 1:2 w l t 'e_{rr,c}'
+plot[9*pi/10:3.15][]\
+'err1_R2_0.ascii' u 1:2 w l t 'e_{rr,1}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,2}' ,\
+'err2_R2_0.ascii' u 1:2 w l t 'e_{rr,3}' ,\
+#'errc_R2_0.ascii' u 1:2 w l t 'e_{rr,c}'
+unset multiplot
+
+
+#################################################
+
+set output 'DT_R1.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'DT1_R1_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R1_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R1_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+#'DTc_R1_0.ascii' u 1:2 w l t 'DT_{c}'
+plot[0:pi/10][]\
+'DT1_R1_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R1_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R1_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+#'DTc_R1_0.ascii' u 1:2 w l t 'DT_{c}'
+plot[9*pi/10:3.15][]\
+'DT1_R1_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R1_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R1_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+#'DTc_R1_0.ascii' u 1:2 w l t 'DT_{c}'
+unset multiplot
+
+set output 'DT_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'DT1_R2_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R2_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R2_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+'DTc_R2_0.ascii' u 1:2 w l t 'DT_{c}'
+plot[0:pi/10][]\
+'DT1_R2_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R2_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R2_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+'DTc_R2_0.ascii' u 1:2 w l t 'DT_{c}'
+plot[9*pi/10:3.15][]\
+'DT1_R2_0.ascii' u 1:2 w l t 'DT_{1}' ,\
+'DT2_R2_0.ascii' u 1:2 w l t 'DT_{2}' ,\
+'DT3_R2_0.ascii' u 1:2 w l t 'DT_{3}' ,\
+'DTc_R2_0.ascii' u 1:2 w l t 'DT_{c}'
+unset multiplot
+
+
+##################################################
+#set multiplot layout 1,3 columns
+#plot[0:3.15][]\
+#plot[0:pi/10][]\
+#plot[9*pi/10:3.15][]\
+#unset multiplot
+
+set output 'pressure_R1.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'p_R1_0.ascii' u 1:2 w l t 'p' ,\
+'q_R1_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R1_0.ascii'  u 1:2 w l t 'pc'
+plot[0:pi/10][]\
+'p_R1_0.ascii' u 1:2 w l t 'p' ,\
+'q_R1_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R1_0.ascii'  u 1:2 w l t 'pc'
+plot[9*pi/10:3.15][]\
+'p_R1_0.ascii' u 1:2 w l t 'p' ,\
+'q_R1_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R1_0.ascii'  u 1:2 w l t 'pc'
+unset multiplot
+
+set output 'pressure_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'p_R2_0.ascii' u 1:2 w l t 'p' ,\
+'q_R2_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R2_0.ascii'  u 1:2 w l t 'pc'
+plot[0:pi/10][]\
+'p_R2_0.ascii' u 1:2 w l t 'p' ,\
+'q_R2_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R2_0.ascii'  u 1:2 w l t 'pc'
+plot[9*pi/10:3.15][]\
+'p_R2_0.ascii' u 1:2 w l t 'p' ,\
+'q_R2_0.ascii' u 1:2 w l t 'q' ,\
+'pc_R2_0.ascii'  u 1:2 w l t 'pc'
+unset multiplot
+
+##################################################
+
+set output 'sr_R1.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'sr1_R1_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R1_0.ascii' u 1:2 w l t 'e_{c}'
+plot[0:pi/10][]\
+'sr1_R1_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R1_0.ascii' u 1:2 w l t 'e_{c}'
+plot[9*pi/10:3.15][]\
+'sr1_R1_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R1_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R1_0.ascii' u 1:2 w l t 'e_{c}'
+unset multiplot
+
+
+
+
+set output 'sr_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'sr1_R2_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R2_0.ascii' u 1:2 w l t 'e_{c}'
+plot[0:pi/10][]\
+'sr1_R2_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R2_0.ascii' u 1:2 w l t 'e_{c}'
+plot[9*pi/10:3.15][]\
+'sr1_R2_0.ascii' u 1:2 w l t 'e_{1}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{2}' ,\
+'sr2_R2_0.ascii' u 1:2 w l t 'e_{3}' ,\
+'src_R2_0.ascii' u 1:2 w l t 'e_{c}'
+unset multiplot
+
+
+##################################################
+
+set output 'vt_R1.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'vel_R1_0.ascii'  u 1:4 w l t '|v|' 
+plot[0:pi/10][]\
+'vel_R1_0.ascii'  u 1:4 w l t '|v|' 
+plot[9*pi/10:3.15][]\
+'vel_R1_0.ascii'  u 1:4 w l t '|v|' 
+unset multiplot
+
+set output 'vt_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'vel_R2_0.ascii'  u 1:4 w l t '|v|' 
+plot[0:pi/10][]\
+'vel_R2_0.ascii'  u 1:4 w l t '|v|' 
+plot[9*pi/10:3.15][]\
+'vel_R2_0.ascii'  u 1:4 w l t '|v|' 
+unset multiplot
+
+
+##################################################
+
+set output 'vr_R1.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'vel_R1_0.ascii'  u 1:3 w l t '|v|' 
+plot[0:pi/10][]\
+'vel_R1_0.ascii'  u 1:3 w l t '|v|' 
+plot[9*pi/10:3.15][]\
+'vel_R1_0.ascii'  u 1:3 w l t '|v|' 
+unset multiplot
+
+set output 'vr_R2.pdf'
+set multiplot layout 1,3 columns
+plot[0:3.15][]\
+'vel_R2_0.ascii'  u 1:3 w l t '|v|' 
+plot[0:pi/10][]\
+'vel_R2_0.ascii'  u 1:3 w l t '|v|' 
+plot[9*pi/10:3.15][]\
+'vel_R2_0.ascii'  u 1:3 w l t '|v|' 
+
+
+
+
+

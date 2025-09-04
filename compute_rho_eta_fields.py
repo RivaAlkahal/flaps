@@ -51,12 +51,12 @@ def compute_rho_eta_fields(mV,NV,nel,xV,zV,xc,zc,iconV,R1,R2,eta_model,rho_model
               density_elemental[iel]=density_AnnulusBenchmark(xc[iel],zc[iel],R1,R2)
 
            case "AquariumBenchmark":
-              viscosity_elemental[iel]=1e22
+              viscosity_elemental[iel]=1e21
               density_elemental[iel]=4000
 
            case "MarsDisc":
               viscosity_elemental[iel]=viscosity_MarsDisc(xc[iel],zc[iel],R1,R2,\
-                                                          blob_eta,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                                                          blob_eta,blob_z,blob_R1,blob_R2,blob_theta,\
                                                           crust_eta,crust_depth,\
                                                           lithosphere_eta,lithosphere_depth,\
                                                           uppermantle_eta,uppermantle_depth,\
@@ -65,7 +65,7 @@ def compute_rho_eta_fields(mV,NV,nel,xV,zV,xc,zc,iconV,R1,R2,eta_model,rho_model
 
 
               density_elemental[iel]=density_MarsDisc(xc[iel],zc[iel],R1,R2,\
-                                                      blob_rho,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                                                      blob_rho,blob_z,blob_R1,blob_R2,blob_theta,\
                                                       crust_rho,crust_depth,\
                                                       lithosphere_rho,lithosphere_depth,\
                                                       uppermantle_rho,uppermantle_depth,\
@@ -93,18 +93,21 @@ def compute_rho_eta_fields(mV,NV,nel,xV,zV,xc,zc,iconV,R1,R2,eta_model,rho_model
 
            case "MarsDisc":
               viscosity_nodal[i]=viscosity_MarsDisc(xV[i],zV[i],R1,R2,\
-                                                    blob_eta,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                                                    blob_eta,blob_z,blob_R1,blob_R2,blob_theta,\
                                                     crust_eta,crust_depth,\
                                                     lithosphere_eta,lithosphere_depth,\
                                                     uppermantle_eta,uppermantle_depth,\
                                                     lowermantle_eta)
 
               density_nodal[i]=density_MarsDisc(xV[i],zV[i],R1,R2,\
-                                                blob_rho,blob_z,blob_R,blob_R1,blob_R2,blob_theta,\
+                                                blob_rho,blob_z,blob_R1,blob_R2,blob_theta,\
                                                 crust_rho,crust_depth,\
                                                 lithosphere_rho,lithosphere_depth,\
                                                 uppermantle_rho,uppermantle_depth,\
                                                 lowermantle_rho)
+           case "AquariumBenchmark":
+              viscosity_nodal[i]=1e21
+              density_nodal[i]=4000
 
            case _:
               exit('pb2 in compute_rho_eta_fields: unknown planet')

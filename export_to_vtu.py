@@ -9,7 +9,7 @@ from gravity_vector import *
 
 
 def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
-                           theta,nx,nz,sr1,sr2,sr3,density_nodal,density_elemental,\
+                           theta,nx,nz,sr1,sr2,sr3,src,density_nodal,density_elemental,\
                            viscosity_nodal,viscosity_elemental,R1,R2,rho_m,gravity_model,\
                            g0,rhoc,rhoblob,Rblob,zblob,hull,inner_element,outer_element,\
                            innerQ2,outerQ2,nodesR1,nodesR2,nodesmoho,nodesLAB,\
@@ -225,6 +225,11 @@ def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
    vtufile.write("<DataArray type='Float32' Name='mass' Format='ascii'> \n")
    for iel in range(0,nel):
        vtufile.write("%e \n" %mass_elt[iel])
+   vtufile.write("</DataArray>\n")
+   #--
+   vtufile.write("<DataArray type='Float32' Name='src' Format='ascii'> \n")
+   for iel in range(0,nel):
+       vtufile.write("%e \n" %src[iel])
    vtufile.write("</DataArray>\n")
    #--
    vtufile.write("<DataArray type='Float32' Name='outer_element' Format='ascii'> \n")
