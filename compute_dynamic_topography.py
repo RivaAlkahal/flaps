@@ -1,10 +1,10 @@
 ###############################################################################
 import numpy as np
 from constants import *
-
+import os
 ###############################################################################
 
-def compute_dynamic_topography(nel,NV,viscosity_nodal,viscosity_elemental,errc,err1,err2,err3,q,pc,solve_stokes,\
+def compute_dynamic_topography(output_dir,nel,NV,viscosity_nodal,viscosity_elemental,errc,err1,err2,err3,q,pc,solve_stokes,\
                                surfaceV,cmbV,inner_element,outer_element,innerQ2,outerQ2,istep,theta,thetac,\
                                uppermantle_rho,lowermantle_rho,rho_core,g0,bottom_p_avrg):
 
@@ -31,17 +31,17 @@ def compute_dynamic_topography(nel,NV,viscosity_nodal,viscosity_elemental,errc,e
            if inner_element[iel]:
               dyn_topo_elemental[iel]= -(2*viscosity_elemental[iel]*errc[iel]-(pc[iel]-bottom_p_avrg))/((lowermantle_rho-rho_core)*g0) 
 
-       np.savetxt('DT1_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],dyn_topo_nodal1[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('DT1_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],dyn_topo_nodal1[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'DT1_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],dyn_topo_nodal1[innerQ2]]).T,fmt='%1.16e')
+       np.savetxt(os.path.join(output_dir,'DT1_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],dyn_topo_nodal1[outerQ2]]).T,fmt='%1.16e')
 
-       np.savetxt('DT2_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],dyn_topo_nodal2[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('DT2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],dyn_topo_nodal2[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'DT2_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],dyn_topo_nodal2[innerQ2]]).T,fmt='%1.16e')
+       np.savetxt(os.path.join(output_dir,'DT2_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],dyn_topo_nodal2[outerQ2]]).T,fmt='%1.16e')
 
-       np.savetxt('DT3_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],dyn_topo_nodal3[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('DT3_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],dyn_topo_nodal3[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'DT3_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],dyn_topo_nodal3[innerQ2]]).T,fmt='%1.16e')
+       np.savetxt(os.path.join(output_dir,'DT3_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],dyn_topo_nodal3[outerQ2]]).T,fmt='%1.16e')
 
-       np.savetxt('DTc_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],dyn_topo_elemental[inner_element]]).T,fmt='%1.4e')
-       np.savetxt('DTc_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],dyn_topo_elemental[outer_element]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'DTc_R1_'+str(istep)+'.ascii'),np.array([thetac[inner_element],dyn_topo_elemental[inner_element]]).T,fmt='%1.16e')
+       np.savetxt(os.path.join(output_dir,'DTc_R2_'+str(istep)+'.ascii'),np.array([thetac[outer_element],dyn_topo_elemental[outer_element]]).T,fmt='%1.16e')
 
        print(spacing+" -> dyn_topo_nodal1 surface (m,M) %e %e | nel= %d" %(np.min(dyn_topo_nodal1[surfaceV]),np.max(dyn_topo_nodal1[surfaceV]),nel))
        print(spacing+" -> dyn_topo_nodal2 surface (m,M) %e %e | nel= %d" %(np.min(dyn_topo_nodal2[surfaceV]),np.max(dyn_topo_nodal2[surfaceV]),nel))

@@ -4,18 +4,18 @@ import numpy as np
 from basis_functions import *
 from analytical_solution import *
 from gravity_vector import *
-
+import os
 ###############################################################################
 
 
-def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
+def export_solution_to_vtu(output_dir,istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
                            theta,nx,nz,sr1,sr2,sr3,src,density_nodal,density_elemental,\
                            viscosity_nodal,viscosity_elemental,R1,R2,rho_m,gravity_model,\
                            g0,rhoc,rhoblob,Rblob,zblob,hull,inner_element,outer_element,\
                            innerQ2,outerQ2,nodesR1,nodesR2,nodesmoho,nodesLAB,\
                            bc_fix,e_rr2,e_tt2,e_rt2,vol_elt,mass_elt,planet):
 
-   vtufile=open("solution_"+str(istep)+".vtu","w")
+   vtufile=open(os.path.join(output_dir,"solution_"+str(istep)+".vtu"),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints=' %5d ' NumberOfCells=' %5d '> \n" %(NV,nel))
@@ -277,9 +277,9 @@ def export_solution_to_vtu(istep,NV,nel,xV,zV,iconV,u,v,vr,vt,q,vel_unit,rad,\
 
 ###############################################################################
 
-def export_elt_quadrature_points_to_vtu(nqperdim,nqel,qcoords_r,qcoords_s,mapping,xmapping,ymapping):
+def export_elt_quadrature_points_to_vtu(output_dir,nqperdim,nqel,qcoords_r,qcoords_s,mapping,xmapping,ymapping):
 
-   vtufile=open("quadrature_points_"+str(nqperdim)+".vtu","w")
+   vtufile=open(os.path.join(output_dir,"quadrature_points_"+str(nqperdim)+".vtu"),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints='%5d' NumberOfCells='%5d'> \n" %(nqel,nqel))
@@ -322,9 +322,9 @@ def export_elt_quadrature_points_to_vtu(nqperdim,nqel,qcoords_r,qcoords_s,mappin
 
 ###############################################################################
 
-def export_mapping_points_to_vtu(mapping,mmapping,xmapping,ymapping):
+def export_mapping_points_to_vtu(output_dir,mapping,mmapping,xmapping,ymapping):
 
-   vtufile=open("mapping_points_"+mapping+".vtu","w")
+   vtufile=open(os.path.join(output_dir,"mapping_points_"+mapping+".vtu"),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints='%5d' NumberOfCells='%5d'> \n" %(mmapping,mmapping))
@@ -362,9 +362,9 @@ def export_mapping_points_to_vtu(mapping,mmapping,xmapping,ymapping):
 
 ###############################################################################
 
-def export_Q1_mesh_to_vtu(NV,nel,xV,yV,iconQ1):
+def export_Q1_mesh_to_vtu(output_dir,NV,nel,xV,yV,iconQ1):
 
-   vtufile=open("mesh_Q1.vtu","w")
+   vtufile=open(os.path.join(output_dir,"mesh_Q1.vtu"),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints=' %5d ' NumberOfCells=' %5d '> \n" %(NV,nel))
@@ -402,10 +402,10 @@ def export_Q1_mesh_to_vtu(NV,nel,xV,yV,iconQ1):
 
 ###############################################################################
 
-def export_gravity_to_vtu(istep,np_grav,xM,zM,gvect_x,gvect_z):
+def export_gravity_to_vtu(output_dir,istep,np_grav,xM,zM,gvect_x,gvect_z):
 
    filename = 'gravity_{:04d}.vtu'.format(istep)
-   vtufile=open(filename,"w")
+   vtufile=open(os.path.join(output_dir,filename),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints='%5d' NumberOfCells='%5d'> \n" %(np_grav,np_grav))
@@ -500,9 +500,9 @@ def export_slices(nel_phi,NV,nel,r,theta,iconV,rho):
 
 ###############################################################################
 
-def export_quadrature_points_to_vtu(nq,coords_xq,coords_zq,rhoq,etaq):
+def export_quadrature_points_to_vtu(output_dir,nq,coords_xq,coords_zq,rhoq,etaq):
 
-   vtufile=open("quadrature_points.vtu","w")
+   vtufile=open(os.path.join(output_dir,"quadrature_points.vtu"),"w")
    vtufile.write("<VTKFile type='UnstructuredGrid' version='0.1' byte_order='BigEndian'> \n")
    vtufile.write("<UnstructuredGrid> \n")
    vtufile.write("<Piece NumberOfPoints='%5d' NumberOfCells='%5d'> \n" %(nq,nq))

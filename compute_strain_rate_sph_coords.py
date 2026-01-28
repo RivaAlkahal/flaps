@@ -1,12 +1,12 @@
 ###############################################################################
 import numpy as np
 from constants import *
-
+import os
 ###############################################################################
 # Note that there is a pb when we run the model in plane strain. In that 
 # case I set the err,ert,ett to zero for x<0 (t -> theta). See manual.
 
-def compute_strain_rate_sph_coords(solve_stokes,nel,NV,theta,thetac,istep,\
+def compute_strain_rate_sph_coords(output_dir,solve_stokes,nel,NV,theta,thetac,istep,\
                                    inner_element,outer_element,innerQ2,outerQ2,\
                                    exx1,exx2,exx3,exxc,\
                                    exz1,exz2,exz3,exzc,\
@@ -48,14 +48,14 @@ def compute_strain_rate_sph_coords(solve_stokes,nel,NV,theta,thetac,istep,\
            ettc[iel]=exxc[iel]*np.cos(thetac[iel])**2-2*exzc[iel]*np.sin(thetac[iel])*np.cos(thetac[iel])+ezzc[iel]*np.sin(thetac[iel])**2
            ertc[iel]=(exxc[iel]-ezzc[iel])*np.sin(thetac[iel])*np.cos(thetac[iel])+exzc[iel]*(-np.sin(thetac[iel])**2+np.cos(thetac[iel])**2)
 
-       np.savetxt('errc_R1_'+str(istep)+'.ascii',np.array([thetac[inner_element],errc[inner_element]]).T,fmt='%1.4e')
-       np.savetxt('errc_R2_'+str(istep)+'.ascii',np.array([thetac[outer_element],errc[outer_element]]).T,fmt='%1.4e')
-       np.savetxt('err1_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],err1[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('err1_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],err1[outerQ2]]).T,fmt='%1.4e')
-       np.savetxt('err2_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],err2[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('err2_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],err2[outerQ2]]).T,fmt='%1.4e')
-       np.savetxt('err3_R1_'+str(istep)+'.ascii',np.array([theta[innerQ2],err3[innerQ2]]).T,fmt='%1.4e')
-       np.savetxt('err3_R2_'+str(istep)+'.ascii',np.array([theta[outerQ2],err3[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'errc_R1_'+str(istep)+'.ascii'),np.array([thetac[inner_element],errc[inner_element]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'errc_R2_'+str(istep)+'.ascii'),np.array([thetac[outer_element],errc[outer_element]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err1_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],err1[innerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err1_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],err1[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err2_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],err2[innerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err2_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],err2[outerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err3_R1_'+str(istep)+'.ascii'),np.array([theta[innerQ2],err3[innerQ2]]).T,fmt='%1.4e')
+       np.savetxt(os.path.join(output_dir,'err3_R2_'+str(istep)+'.ascii'),np.array([theta[outerQ2],err3[outerQ2]]).T,fmt='%1.4e')
 
        print(spacing+" -> errc (m,M) %e %e | nel= %d" %(np.min(errc),np.max(errc),nel))
        print(spacing+" -> err1 (m,M) %e %e | nel= %d" %(np.min(err1),np.max(err1),nel))
